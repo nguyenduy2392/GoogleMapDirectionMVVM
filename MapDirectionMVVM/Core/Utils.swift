@@ -44,12 +44,16 @@ class Utils {
     return CLLocationCoordinate2DMake(CLLocationDegrees(lat), CLLocationDegrees(lng))
   }
   
-  static func getPointDurationTime(durationTime: Int, pointDistance: Double) -> Double {
-    return Double(durationTime) / pointDistance
+  static func getPointDurationTime(durationTime: Double, pointDistance: Double) -> Double {
+    return durationTime / pointDistance
   }
   
   static func getDistanceLocation(start: CLLocation, end: CLLocation) -> Double {
     return start.distance(from: end)
+  }
+  
+  static func getSpeed(distance: Int, duration: Int) -> Int {
+    return distance * 3600 / (duration * 1000)
   }
 }
 

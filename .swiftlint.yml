@@ -2,8 +2,8 @@ excluded: # paths to ignore during linting. Takes precedence over `included`.
   - Carthage
   - Pods
 line_length:
-  - 300 # warning
-  - 400 # error
+  - 10000 # warning
+  - 10000 # error
 disabled_rules:
   - trailing_whitespace
   - colon

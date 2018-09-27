@@ -12,5 +12,7 @@ pod 'RxCocoa',    '~> 4.0'
 pod 'ObjectMapper', '~> 3.3'
 pod 'Alamofire', '~> 4.7'
 pod 'ObservableArray-RxSwift'
+pod 'GoogleMaps'
+pod 'GooglePlaces'
 
 end

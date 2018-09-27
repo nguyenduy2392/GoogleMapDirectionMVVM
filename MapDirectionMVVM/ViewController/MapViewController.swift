@@ -10,113 +10,109 @@ import UIKit
 import MapKit
 import RxSwift
 import RxCocoa
+import GoogleMaps
 
 class MapViewController: UIViewController {
   
-  @IBOutlet weak var mapView: MKMapView!
   @IBOutlet weak var originTextField: UITextField!
   @IBOutlet weak var destinationTextField: UITextField!
   let directionViewModel = DirectionViewModel()
-  var myLocation: Artwork!
+  var myLocation: GMSMarker!
   let disposeBag = DisposeBag()
+  @IBOutlet weak var googleMapView: GMSMapView!
+  @IBOutlet weak var runButton: UIButton!
+  @IBOutlet weak var speedButton: UIButton!
+  @IBOutlet weak var speedLable: UILabel!
+  @IBOutlet weak var directionButton: UIButton!
   
   override func viewDidLoad() {
     super.viewDidLoad()
-    mapView.delegate = self
+    self.googleMapView.animate(toZoom: 18)
+    self.directionButton.layer.zPosition = 10;
     
-    _ = originTextField.rx.text
-      .map {$0 ?? ""}
-      .bind(to: directionViewModel.origin)
-    _ = destinationTextField.rx.text
-      .map {$0 ?? ""}
-      .bind(to: directionViewModel.destination)
-    
-    directionViewModel.isValid
-      .asObservable()
-      .filter({$0 == true})
-      .subscribe(onNext: {[weak self] _ in
-        self?.removeAll()
-        self?.directionViewModel.resetPosition()
-        self?.directionViewModel.loadRoutes()
-      }).disposed(by: disposeBag)
+    bindingViewModel()
+  }
+  
+  func bindingViewModel() {
     
     directionViewModel.routes
       .asObservable()
-      .subscribe(onNext: {[weak self] _ in
-        self?.mapView.removeAnnotations((self?.mapView.annotations)!)
-        if (self?.directionViewModel.runPathPolyline.count)! > 0 {
-          self?.myLocation = (self?.directionViewModel.runPathPolyline[(self?.directionViewModel.annotationPosition.value)!])!
-          self?.mapView.addAnnotation((self?.directionViewModel.startPoint!)!)
-          self?.mapView.addAnnotation((self?.directionViewModel.endPoint!)!)
-          self?.mapView.addAnnotation((self?.myLocation)!)
-          self?.mapView.add((self?.directionViewModel.polyline)!, level: .aboveRoads)
-          self?.directionViewModel.updatePosition()
+      .filter({$0.count > 0})
+      .subscribe(onNext: {[weak self] routes in
+        if routes.count == 0 {
+          self?.directionButton.layer.zPosition = 10;
+        } else {
+          self?.directionButton.layer.zPosition = 0;
         }
+        // make Routes
+        let polyline = GMSPolyline(path: self?.directionViewModel.polylinePoints)
+        polyline.strokeColor = self?.directionViewModel.request == 1 ? .blue : .red
+        polyline.strokeWidth = 3
+        polyline.map = self?.googleMapView
+        
+        // create Maker
+        let startMaker = self?.createMaker(point: (self?.directionViewModel.startPoint)!)
+        startMaker?.map = self?.googleMapView
+        
+        let stopMaker = self?.createMaker(point: (self?.directionViewModel.endPoint)!)
+        stopMaker?.map = self?.googleMapView
+        
+        self?.myLocation = self?.createMaker(point: (self?.directionViewModel.currentPoint)!)
+        self?.myLocation.map = self?.googleMapView
+        self?.googleMapView.animate(toLocation: (self?.myLocation.position)!)
       }).disposed(by: disposeBag)
     
     directionViewModel.annotationPosition
       .asObservable()
       .subscribe(onNext: {[weak self] annotationPosition in
-        if (self?.directionViewModel.runPathPolyline.count)! > 0 {
-          self?.mapView.removeAnnotations([(self?.myLocation)!])
-          self?.myLocation = self?.directionViewModel.runPathPolyline[annotationPosition]
-          self?.mapView.addAnnotation((self?.myLocation)!)
+        if (self?.directionViewModel.locationPoints!.count)! > 0 {
+          if annotationPosition + 1 == (self?.directionViewModel.locationPoints!.count)! {
+            self?.directionButton.layer.zPosition = 10;
+          }
+          let newPoint = self?.directionViewModel.locationPoints![annotationPosition]
+          self?.myLocation.rotation = newPoint!.rotate
+          self?.myLocation.position = newPoint!.coordinate
+          self?.googleMapView.moveCamera(GMSCameraUpdate.setTarget(newPoint!.coordinate))
+          self?.myLocation.map = self?.googleMapView
+          self?.speedLable.text = "\(String(describing: newPoint!.speed)) km/h"
         }
       }).disposed(by: disposeBag)
     
-    directionViewModel.centerLocation.asObservable().subscribe(onNext: {[weak self] centerLocation in
-      let coordinateRegion = MKCoordinateRegionMakeWithDistance(centerLocation.coordinate, AppConstant.regionRadius, AppConstant.regionRadius)
-      self?.mapView.setRegion(coordinateRegion, animated: true)
-    }).disposed(by: disposeBag)
+    directionViewModel.playStatus
+      .asObservable()
+      .subscribe(onNext: {[weak self] status in
+        if status {
+          self?.runButton.setTitle("Stop", for: .normal)
+        } else {
+          self?.runButton.setTitle("Play", for: .normal)
+        }
+      }).disposed(by: disposeBag)
+    
+    directionViewModel.playSpeed
+      .asObservable()
+      .subscribe(onNext: {[weak self] speed in
+          self?.speedButton.setTitle("\(speed)x", for: .normal)
+      }).disposed(by: disposeBag)
   }
   
-  func removeAll() {
-    self.mapView.removeOverlays(self.mapView.overlays)
-    self.mapView.removeAnnotations(self.mapView.annotations)
-  }
-}
-
-extension MapViewController: MKMapViewDelegate {
-  func mapView(_ mapView: MKMapView, viewFor annotation: MKAnnotation) -> MKAnnotationView? {
-    
-    let annotationView = AttractionAnnotationView(annotation: annotation, reuseIdentifier: "Attraction")
-    annotationView.canShowCallout = true
-    
-    return annotationView
+  func createMaker(point: Artwork) -> GMSMarker {
+    let marker = GMSMarker()
+    marker.position = point.coordinate
+    marker.title = point.title
+    marker.snippet = point.locationName
+    marker.icon = point.type.image()
+    marker.groundAnchor = CGPoint(x: 0.5, y: 0.5)
+    return marker
   }
   
-  func mapView(_ mapView: MKMapView, annotationView view: MKAnnotationView,
-               calloutAccessoryControlTapped control: UIControl) {
-    let location = view.annotation as! Artwork
-    let launchOptions = [MKLaunchOptionsDirectionsModeKey: MKLaunchOptionsDirectionsModeDriving]
-    location.mapItem().openInMaps(launchOptions: launchOptions)
+  @IBAction func runButtonTouchUp(_ sender: Any) {
+    self.directionViewModel.runHistory()
   }
   
-  func mapView(_ mapView: MKMapView, rendererFor overlay: MKOverlay) -> MKOverlayRenderer {
-    if overlay is MKPolyline {
-      let lineView = MKPolylineRenderer(polyline: overlay as! MKPolyline)
-      lineView.lineWidth = 3.0
-      lineView.alpha = 0.5
-      lineView.strokeColor = UIColor.blue
-      mapView.renderer(for: overlay)
-      return lineView
-    }
-    
-    return MKOverlayRenderer()
+  @IBAction func changeSpeedButtonTouchUp(_ sender: Any) {
+    self.directionViewModel.changeSpeed()
   }
-}
-
-class AttractionAnnotationView: MKAnnotationView {
-  required init?(coder aDecoder: NSCoder) {
-    super.init(coder: aDecoder)
-  }
-  
-  override init(annotation: MKAnnotation?, reuseIdentifier: String?) {
-    super.init(annotation: annotation, reuseIdentifier: reuseIdentifier)
-    guard let attractionAnnotation = self.annotation as? Artwork else { return }
-    
-    image = attractionAnnotation.type.image()
-    transform = CGAffineTransform(rotationAngle: CGFloat(attractionAnnotation.rotate * Double.pi / 180 ))
-    layer.zPosition = attractionAnnotation.zPosition
+  @IBAction func directionButtonTouchUp(_ sender: Any) {
+    self.directionViewModel.selectRoutes()
   }
 }

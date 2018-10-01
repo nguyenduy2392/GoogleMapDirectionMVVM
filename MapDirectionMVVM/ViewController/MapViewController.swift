@@ -34,7 +34,6 @@ class MapViewController: UIViewController {
   }
   
   func bindingViewModel() {
-    
     directionViewModel.routes
       .asObservable()
       .filter({$0.count > 0})
@@ -57,6 +56,9 @@ class MapViewController: UIViewController {
         let stopMaker = self?.createMaker(point: (self?.directionViewModel.endPoint)!)
         stopMaker?.map = self?.googleMapView
         
+        if ((self?.myLocation) != nil) {
+          self?.myLocation.map = nil
+        }
         self?.myLocation = self?.createMaker(point: (self?.directionViewModel.currentPoint)!)
         self?.myLocation.map = self?.googleMapView
         self?.googleMapView.animate(toLocation: (self?.myLocation.position)!)
@@ -72,7 +74,8 @@ class MapViewController: UIViewController {
           let newPoint = self?.directionViewModel.locationPoints![annotationPosition]
           self?.myLocation.rotation = newPoint!.rotate
           self?.myLocation.position = newPoint!.coordinate
-          self?.googleMapView.moveCamera(GMSCameraUpdate.setTarget(newPoint!.coordinate))
+//          self?.googleMapView.moveCamera(GMSCameraUpdate.setTarget(newPoint!.coordinate))
+          self?.googleMapView.animate(toLocation: (self?.myLocation.position)!)
           self?.myLocation.map = self?.googleMapView
           self?.speedLable.text = "\(String(describing: newPoint!.speed)) km/h"
         }
